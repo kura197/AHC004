@@ -205,6 +205,18 @@ vector<string> remove_input(const vector<string>& input, const vector<string>& a
     return ret;
 }
 
+/// xor128
+unsigned int randxor()
+{
+    static unsigned int x=123456789, y=362436069, z=521288629, w=88675123;
+    unsigned int t;
+    t = (x^(x<<11));
+    x = y;
+    y = z;
+    z = w; 
+    return( w=(w^(w>>19))^(t^(t>>8)) );
+}
+
 int main(){
     ll start = clock();
     ll N, M;
@@ -235,31 +247,39 @@ int main(){
         }
         if(valid) continue;
 
-        const int OVERLAP = 3;
-        //// s はrowのどれかの一部であるか
-        for(auto& r : remain){
-            auto check = [&remain, &N, &elms](auto& a, auto& b) {
-                int al = a.length(), bl = b.length();
-                auto len = overlap(a, b);
-                if(len >= OVERLAP){
-                    if(al + bl - len > N)
-                        return false;
-                    auto nstr = a + b.substr(len);
-                    remain.insert(nstr);
-                    elms[nstr] = elms[a] + elms[b] + 1;
-                    ///TODO
-                    remain.erase(a);
-                    remain.erase(b);
-                    elms.erase(a);
-                    elms.erase(b);
-                    return true;
+        {
+            const int OVERLAP = 2;
+            string rem;
+            string nstr;
+            int max_len = -1;
+            for(auto& r : remain){
+                auto s_len = overlap(s, r);
+                auto r_len = overlap(r, s);
+                int sl = s.length();
+                int rl = r.length();
+                if(s_len > r_len){
+                    if(sl + rl - s_len <= N && max_len < s_len){
+                        nstr = s + r.substr(s_len);
+                        max_len = s_len;
+                        rem = r;
+                    }
+                } else {
+                    if(sl + rl - r_len <= N && max_len < r_len){
+                        nstr = r + s.substr(r_len);
+                        max_len = r_len;
+                        rem = r;
+                    }
                 }
-                return false;
-            };
+            }
 
-            if(check(s, r) || check(r, s)){
+            if(max_len >= OVERLAP){
+                remain.insert(nstr);
+                elms[nstr] = elms[s] + elms[rem] + 1;
+                remain.erase(s);
+                remain.erase(rem);
+                elms.erase(s);
+                elms.erase(rem);
                 valid = true;
-                break;
             }
         }
 
@@ -283,6 +303,7 @@ int main(){
         int row = 0;
         for(auto& p : tmp){
             auto ans = p.second;
+            //cerr << ans << endl;
             for(int i = ans.length(); i < N; i++)
                 ans += random_char();
             answer[row] = ans;
@@ -299,23 +320,46 @@ int main(){
     //// TODO: heuristic にanswerの各行の並び順をいじる.
     ll score = calc_score_col(input, answer);
     //const double TIME = 2.8;
-    const double TIME = 0.1;
+    const double TIME = 1.0;
+
+    const int iteration = 500;
+    const double startTemp = 100;
+    const double endTemp = 1;
+    const int R = 10000;
+    const int T = iteration;
+    int t = 0;
     while(1){
         if((double)(clock() - start) / CLOCKS_PER_SEC > TIME)
             break;
         static mt19937 engine = mt19937(100);;
         static uniform_int_distribution<> rand(0, SIZE-1);
 
-        int row = rand(engine);
-        int rot = rand(engine);
-        auto tmp = answer[row];
-        answer[row] = answer[row].substr(rot) + answer[row].substr(0, rot);
+        //const int NUM = (t < 25) ? 4 : (t < 50) ? 3 : (t < 75) ? 2 : 1;
+        const int NUM = 1;
+        vector<int> row(NUM);
+        vector<int> rot(NUM);
+        vector<string> org(NUM);
+        for(int i = 0; i < NUM; i++){
+            row[i] = rand(engine);
+            rot[i] = rand(engine);
+            org[i] = answer[row[i]];
+            answer[row[i]] = answer[row[i]].substr(rot[i]) + answer[row[i]].substr(0, rot[i]);
+        }
+
         ll tmp_score = calc_score_col(input, answer);
+        double temp = startTemp + (endTemp - startTemp) * t / T;
+        double probability = exp((tmp_score - score) / temp);
+        bool force_next = probability > (double)(randxor() % R) / R;
+        cerr << t << " " << probability << " " << tmp_score << " " << score << endl;
+        //if(tmp_score > score || force_next){
         if(tmp_score > score){
             score = tmp_score;
         } else {
-            answer[row] = tmp;
+            for(int i = NUM-1; i >= 0; i--)
+                answer[row[i]] = org[i];
         }
+
+        t++;
     }
 
     print_answer(answer);
