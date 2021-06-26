@@ -85,6 +85,12 @@ void print_answer(vector<string>& answer){
     }
 }
 
+void print_answer_debug(vector<string>& answer){
+    REP(i,SIZE){
+        cerr << answer[i] << endl;
+    }
+}
+
 void set_naive_answer(vector<string>& answer){
     int N = answer.size();
     REP(i,N){
@@ -131,7 +137,7 @@ vector<string> rot_matrix(const vector<string>& mat){
 }
 
 //// 適当に1文字返す.
-char random_char(mt19937 engine){
+char random_char(mt19937& engine){
     //static mt19937 engine = mt19937(100);;
     static uniform_int_distribution<> rand(0, 7);
     return 'A' + rand(engine);
@@ -219,160 +225,208 @@ unsigned int randxor()
     return( w=(w^(w>>19))^(t^(t>>8)) );
 }
 
-vector<string> solve(vector<string> input, double time, int threshold, mt19937 engine){
-    ll start = clock();
-    vector<string> answer(N, string(N, '.'));
-    set<string, Compare> candidate;
-    for(auto& s : input)
-        candidate.insert(s);
-
-    set<string, Compare> remain;
-    //// そのstringがいくつのinputでできているか
-    unordered_map<string, int> elms;
-    for(auto& s : candidate){
+//// あるqueryに包含されているqueryを除去する
+set<string, Compare> remove_contain(set<string, Compare>& vec, auto& elms){
+    set<string, Compare> ret;
+    for(auto& s : vec){
         //// s はrowのどれかに含まれるか？
         bool valid = false;
-        for(auto& r : remain){
+        for(auto& r : ret){
             if(contain(s, r)){
                 valid = true;
-                elms[r] += 1;
+                elms[r] += elms[s];
+                elms[s] = 0;
+                elms.erase(s);
                 break;
             }
         }
         if(valid) continue;
+        ret.insert(s);
+    }
+    return ret;
+}
 
-        {
-            const int OVERLAP = threshold;
-            string rem;
-            string nstr;
-            int max_len = -1;
-            for(auto& r : remain){
-                auto s_len = overlap(s, r);
-                auto r_len = overlap(r, s);
-                int sl = s.length();
-                int rl = r.length();
-                if(s_len > r_len){
-                    if(sl + rl - s_len <= N && max_len < s_len){
-                        nstr = s + r.substr(s_len);
-                        max_len = s_len;
-                        rem = r;
-                    }
-                } else {
-                    if(sl + rl - r_len <= N && max_len < r_len){
-                        nstr = r + s.substr(r_len);
-                        max_len = r_len;
-                        rem = r;
-                    }
+//// threshold 以上の重なりのある文字列を結合する
+set<string, Compare> append_query(set<string, Compare>& vec, auto& elms, int threshold){
+    set<string, Compare> ret;
+    for(auto& s : vec){
+        string rem;
+        string nstr;
+        int max_len = -1;
+        for(auto& r : ret){
+            auto s_len = overlap(s, r);
+            auto r_len = overlap(r, s);
+            int sl = s.length();
+            int rl = r.length();
+            if(s_len > r_len){
+                if(sl + rl - s_len <= N && max_len < s_len){
+                    nstr = s + r.substr(s_len);
+                    max_len = s_len;
+                    rem = r;
+                }
+            } 
+            else {
+                if(sl + rl - r_len <= N && max_len < r_len){
+                    nstr = r + s.substr(r_len);
+                    max_len = r_len;
+                    rem = r;
                 }
             }
+        }
 
-            if(max_len >= OVERLAP){
-                remain.insert(nstr);
-                elms[nstr] = elms[s] + elms[rem] + 1;
-                remain.erase(s);
-                remain.erase(rem);
+        if(max_len >= threshold){
+            ret.insert(nstr);
+            elms[nstr] = elms[s] + elms[rem];
+            ret.erase(s);
+            ret.erase(rem);
+            elms.erase(s);
+            elms.erase(rem);
+            continue;
+        }
+
+        ret.insert(s);
+    }
+    return ret;
+}
+
+//// 長さがN以下となるように、queryを結合する
+set<string, Compare> gather_query(set<string, Compare>& vec, auto& elms){
+    set<string, Compare> ret;
+    for(auto& s : vec){
+        bool valid = false;
+        string del;
+        for(auto& r : ret){
+            int sl = s.length();
+            int rl = r.length();
+            if(sl + rl <= N){
+                auto nstr = s + r;
+                ret.insert(nstr);
+                elms[nstr] = elms[s] + elms[r];
                 elms.erase(s);
-                elms.erase(rem);
+                elms.erase(r);
+                del = r;
                 valid = true;
+                break;
             }
         }
 
-        if(valid) continue;
-
-        remain.insert(s);
+        if(valid)
+            ret.erase(del);
+        else
+            ret.insert(s);
     }
+    return ret;
+}
+
+string rotate_str(string a, int rot){
+    return a.substr(rot) + a.substr(0, rot);
+}
+
+void print_elms_sum(auto& elms){
+    ll sum = 0;
+    for(auto& p : elms){
+        sum += p.second;
+    }
+    cerr << "SUM : " << sum << endl;
+}
+
+vector<string> solve(vector<string> input, double time, int threshold, mt19937& engine){
+    ll start = clock();
+    vector<string> answer(N, string(N, '.'));
+
+    //// そのstringがいくつのinputでできているか
+    unordered_map<string, int> elms;
+
+    for(auto& s : input)
+        elms[s] += 1;
+    
+    set<string, Compare> remain;
+    for(auto& s : input)
+        remain.insert(s);
+
+    for(int thres = threshold; thres >= 1; thres--){
+        remain = remove_contain(remain, elms);
+        remain = append_query(remain, elms, thres);
+    }
+    remain = gather_query(remain, elms);
 
     //remove_duplicate(remain);
-    //cerr << remain.size() << endl;
-    //for(auto& r : remain){
-    //    cerr << r << endl;
-    //}
+    
+    cerr << remain.size() << endl;
+    for(auto& r : remain){
+        cerr << r << " " << elms[r] << endl;
+    }
 
     //// 含まれる要素数が大きいものから構成
-    {
-        vector<pair<int, string>> tmp;
-        for(auto& [str, cnt] : elms)
-            tmp.emplace_back(mp(cnt, str));
-        sort(tmp.rbegin(), tmp.rend());
-        int row = 0;
-        for(auto& p : tmp){
-            auto ans = p.second;
-            //cerr << ans << endl;
-            for(int i = ans.length(); i < N; i++)
-                ans += random_char(engine);
-            answer[row] = ans;
-            //del.insert(r);
-            row++;
-            if(row >= N)
-                break;
-        }
+    vector<pair<int, string>> tmp;
+    for(auto& [str, cnt] : elms)
+        tmp.emplace_back(mp(cnt, str));
+    sort(tmp.rbegin(), tmp.rend());
+    int row = 0;
+    int idx = 0;
+    for(; idx < (int)tmp.size(); idx++){
+        auto ans = tmp[idx].second;
+        cerr << ans << " : "  << elms[ans] << endl;
+        for(int i = ans.length(); i < N; i++)
+            ans += random_char(engine);
+        answer[row] = ans;
+        row++;
+        remain.erase(tmp[idx].second);
+        if(row >= N)
+            break;
     }
-    //{
-    //    int row = 0;
-    //    for(auto& s : remain){
-    //        auto ans = s;
-    //        //cerr << ans << endl;
-    //        for(int i = ans.length(); i < N; i++)
-    //            ans += random_char(engine);
-    //        answer[row] = ans;
-    //        //del.insert(r);
-    //        row++;
-    //        if(row >= N)
-    //            break;
-    //    }
+
+    //// answerの各行を回転し、tmpと列ごとに一致させていく
+    //for(; idx < (int)tmp.size(); idx++){
     //}
 
+    //// 行で条件を満たすinputを取り除く
     input = remove_input(input, answer);
-    //cerr << new_input.size() << endl;
 
-    //// TODO: heuristic にanswerの各行の並び順をいじる.
+    vector<int> indices(N);
+    REP(i,N) indices[i] = i;
+
+    string target = tmp[idx].second;
     ll score = calc_score_col(input, answer);
+    //// 時間まで、行を適当にシャッフル --> idx番目が列に含まれるように回転 を繰り返す。
     while(1){
         if((double)(clock() - start) / CLOCKS_PER_SEC > time)
             break;
-        //static mt19937 engine = mt19937(100);;
-        static uniform_int_distribution<> rand(0, SIZE-1);
 
-        //// rotate a row
-        {
-            //const int NUM = (t < 25) ? 4 : (t < 50) ? 3 : (t < 75) ? 2 : 1;
-            const int NUM = 1;
-            vector<int> row(NUM);
-            vector<int> rot(NUM);
-            vector<string> org(NUM);
-            for(int i = 0; i < NUM; i++){
-                row[i] = rand(engine);
-                rot[i] = rand(engine);
-                org[i] = answer[row[i]];
-                answer[row[i]] = answer[row[i]].substr(rot[i]) + answer[row[i]].substr(0, rot[i]);
+        shuffle(indices.begin(), indices.end(), engine);
+        vector<string> cand(N);
+        REP(i,N){
+            cand[i] = answer[indices[i]];
+        }
+
+        //static uniform_int_distribution<> rand(0, SIZE-1);
+        //target = rotate_str(target, rand(engine));
+        bool valid = true;
+        for(int i = 0; i < (int)target.length(); i++){
+            char c = target[i];
+            bool found = false;
+            for(int j = 0; j < N; j++){
+                if(cand[i][j] == c){
+                    found = true;
+                    cand[i] = rotate_str(cand[i], j);
+                    break;
+                }
             }
 
-            ll tmp_score = calc_score_col(input, answer);
-            if(tmp_score > score){
-                score = tmp_score;
-            } else {
-                for(int i = NUM-1; i >= 0; i--)
-                    answer[row[i]] = org[i];
+            if(!found){
+                valid = false;
+                break;
             }
         }
 
-        //// exchange rows
-        {
-            int row0, row1;
-            row0 = row1 = -1;
-            while(row0 == row1){
-                row0 = rand(engine);
-                row1 = rand(engine);
-            }
+        if(!valid) continue;
 
-            swap(answer[row0], answer[row1]);
-            ll tmp_score = calc_score_col(input, answer);
-            if(tmp_score > score){
-                score = tmp_score;
-            } else {
-                swap(answer[row0], answer[row1]);
-            }
-        }
+        ll tmp_score = calc_score_col(input, cand);
+
+        if(tmp_score > score){
+            score = tmp_score;
+            answer = cand;
+        }     
     }
 
     return answer;
@@ -386,13 +440,16 @@ int main(){
         cin >> input[m];
     }
 
-    const double TIME = 2.8;
-    //const double TIME = 0.8;
+    const double TIME = 2.9;
+    //const double TIME = 0.4;
 
     ll score = 0;
     vector<string> answer;
-    vector<int> thresholds{2, 3, 4};
-    vector<int> seeds{1, 100, 10000, 2, 4, 5};
+    //// duplicated
+    //vector<int> thresholds{5};
+    vector<int> seeds{1};
+    vector<int> thresholds{2, 3, 4, 5};
+    //vector<int> seeds{1, 100, 10000};
     const int iteration = thresholds.size() * seeds.size();
     for(auto& thres : thresholds){
         for(auto& seed : seeds){
