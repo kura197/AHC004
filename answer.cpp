@@ -131,8 +131,8 @@ vector<string> rot_matrix(const vector<string>& mat){
 }
 
 //// 適当に1文字返す.
-char random_char(){
-    static mt19937 engine = mt19937(100);;
+char random_char(mt19937 engine){
+    //static mt19937 engine = mt19937(100);;
     static uniform_int_distribution<> rand(0, 7);
     return 'A' + rand(engine);
 }
@@ -219,7 +219,7 @@ unsigned int randxor()
     return( w=(w^(w>>19))^(t^(t>>8)) );
 }
 
-vector<string> solve(vector<string> input, double time, int threshold){
+vector<string> solve(vector<string> input, double time, int threshold, mt19937 engine){
     ll start = clock();
     vector<string> answer(N, string(N, '.'));
     set<string, Compare> candidate;
@@ -282,7 +282,7 @@ vector<string> solve(vector<string> input, double time, int threshold){
         remain.insert(s);
     }
 
-    remove_duplicate(remain);
+    //remove_duplicate(remain);
     //cerr << remain.size() << endl;
     //for(auto& r : remain){
     //    cerr << r << endl;
@@ -299,7 +299,7 @@ vector<string> solve(vector<string> input, double time, int threshold){
             auto ans = p.second;
             //cerr << ans << endl;
             for(int i = ans.length(); i < N; i++)
-                ans += random_char();
+                ans += random_char(engine);
             answer[row] = ans;
             //del.insert(r);
             row++;
@@ -307,51 +307,72 @@ vector<string> solve(vector<string> input, double time, int threshold){
                 break;
         }
     }
+    //{
+    //    int row = 0;
+    //    for(auto& s : remain){
+    //        auto ans = s;
+    //        //cerr << ans << endl;
+    //        for(int i = ans.length(); i < N; i++)
+    //            ans += random_char(engine);
+    //        answer[row] = ans;
+    //        //del.insert(r);
+    //        row++;
+    //        if(row >= N)
+    //            break;
+    //    }
+    //}
 
     input = remove_input(input, answer);
     //cerr << new_input.size() << endl;
 
     //// TODO: heuristic にanswerの各行の並び順をいじる.
     ll score = calc_score_col(input, answer);
-
-    //const int iteration = 500;
-    //const double startTemp = 100;
-    //const double endTemp = 1;
-    //const int R = 10000;
-    //const int T = iteration;
-    //int t = 0;
     while(1){
         if((double)(clock() - start) / CLOCKS_PER_SEC > time)
             break;
-        static mt19937 engine = mt19937(100);;
+        //static mt19937 engine = mt19937(100);;
         static uniform_int_distribution<> rand(0, SIZE-1);
 
-        //const int NUM = (t < 25) ? 4 : (t < 50) ? 3 : (t < 75) ? 2 : 1;
-        const int NUM = 1;
-        vector<int> row(NUM);
-        vector<int> rot(NUM);
-        vector<string> org(NUM);
-        for(int i = 0; i < NUM; i++){
-            row[i] = rand(engine);
-            rot[i] = rand(engine);
-            org[i] = answer[row[i]];
-            answer[row[i]] = answer[row[i]].substr(rot[i]) + answer[row[i]].substr(0, rot[i]);
+        //// rotate a row
+        {
+            //const int NUM = (t < 25) ? 4 : (t < 50) ? 3 : (t < 75) ? 2 : 1;
+            const int NUM = 1;
+            vector<int> row(NUM);
+            vector<int> rot(NUM);
+            vector<string> org(NUM);
+            for(int i = 0; i < NUM; i++){
+                row[i] = rand(engine);
+                rot[i] = rand(engine);
+                org[i] = answer[row[i]];
+                answer[row[i]] = answer[row[i]].substr(rot[i]) + answer[row[i]].substr(0, rot[i]);
+            }
+
+            ll tmp_score = calc_score_col(input, answer);
+            if(tmp_score > score){
+                score = tmp_score;
+            } else {
+                for(int i = NUM-1; i >= 0; i--)
+                    answer[row[i]] = org[i];
+            }
         }
 
-        ll tmp_score = calc_score_col(input, answer);
-        //double temp = startTemp + (endTemp - startTemp) * t / T;
-        //double probability = exp((tmp_score - score) / temp);
-        //bool force_next = probability > (double)(randxor() % R) / R;
-        //cerr << t << " " << probability << " " << tmp_score << " " << score << endl;
-        //if(tmp_score > score || force_next){
-        if(tmp_score > score){
-            score = tmp_score;
-        } else {
-            for(int i = NUM-1; i >= 0; i--)
-                answer[row[i]] = org[i];
-        }
+        //// exchange rows
+        {
+            int row0, row1;
+            row0 = row1 = -1;
+            while(row0 == row1){
+                row0 = rand(engine);
+                row1 = rand(engine);
+            }
 
-        //t++;
+            swap(answer[row0], answer[row1]);
+            ll tmp_score = calc_score_col(input, answer);
+            if(tmp_score > score){
+                score = tmp_score;
+            } else {
+                swap(answer[row0], answer[row1]);
+            }
+        }
     }
 
     return answer;
@@ -365,18 +386,23 @@ int main(){
         cin >> input[m];
     }
 
-    //const double TIME = 2.8;
-    const double TIME = 1.0;
+    const double TIME = 2.8;
+    //const double TIME = 0.8;
 
     ll score = 0;
     vector<string> answer;
     vector<int> thresholds{2, 3, 4};
+    vector<int> seeds{1, 100, 10000, 2, 4, 5};
+    const int iteration = thresholds.size() * seeds.size();
     for(auto& thres : thresholds){
-        auto cand = solve(input, TIME/thresholds.size(), thres);
-        auto tmp_score = calc_score(input, cand);
-        if(tmp_score > score){
-            score = tmp_score;
-            answer = cand;
+        for(auto& seed : seeds){
+            mt19937 engine = mt19937(seed);
+            auto cand = solve(input, TIME/iteration, thres, engine);
+            auto tmp_score = calc_score(input, cand);
+            if(tmp_score > score){
+                score = tmp_score;
+                answer = cand;
+            }
         }
     }
 
