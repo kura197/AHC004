@@ -16,6 +16,8 @@ const ll MOD = 1e9+7;
 /// matrix size
 const ll SIZE = 20;
 
+ll N, M;
+
 unsigned long long calc_hash(string a){
     using ull = unsigned long long;
     const ull B = 100000007;
@@ -217,17 +219,9 @@ unsigned int randxor()
     return( w=(w^(w>>19))^(t^(t>>8)) );
 }
 
-int main(){
+vector<string> solve(vector<string> input, double time, int threshold){
     ll start = clock();
-    ll N, M;
-    cin >> N >> M;
     vector<string> answer(N, string(N, '.'));
-
-    vector<string> input(M);
-    for(int m = 0; m < M; m++){
-        cin >> input[m];
-    }
-
     set<string, Compare> candidate;
     for(auto& s : input)
         candidate.insert(s);
@@ -248,7 +242,7 @@ int main(){
         if(valid) continue;
 
         {
-            const int OVERLAP = 2;
+            const int OVERLAP = threshold;
             string rem;
             string nstr;
             int max_len = -1;
@@ -319,17 +313,15 @@ int main(){
 
     //// TODO: heuristic にanswerの各行の並び順をいじる.
     ll score = calc_score_col(input, answer);
-    //const double TIME = 2.8;
-    const double TIME = 1.0;
 
-    const int iteration = 500;
-    const double startTemp = 100;
-    const double endTemp = 1;
-    const int R = 10000;
-    const int T = iteration;
-    int t = 0;
+    //const int iteration = 500;
+    //const double startTemp = 100;
+    //const double endTemp = 1;
+    //const int R = 10000;
+    //const int T = iteration;
+    //int t = 0;
     while(1){
-        if((double)(clock() - start) / CLOCKS_PER_SEC > TIME)
+        if((double)(clock() - start) / CLOCKS_PER_SEC > time)
             break;
         static mt19937 engine = mt19937(100);;
         static uniform_int_distribution<> rand(0, SIZE-1);
@@ -347,10 +339,10 @@ int main(){
         }
 
         ll tmp_score = calc_score_col(input, answer);
-        double temp = startTemp + (endTemp - startTemp) * t / T;
-        double probability = exp((tmp_score - score) / temp);
-        bool force_next = probability > (double)(randxor() % R) / R;
-        cerr << t << " " << probability << " " << tmp_score << " " << score << endl;
+        //double temp = startTemp + (endTemp - startTemp) * t / T;
+        //double probability = exp((tmp_score - score) / temp);
+        //bool force_next = probability > (double)(randxor() % R) / R;
+        //cerr << t << " " << probability << " " << tmp_score << " " << score << endl;
         //if(tmp_score > score || force_next){
         if(tmp_score > score){
             score = tmp_score;
@@ -359,7 +351,33 @@ int main(){
                 answer[row[i]] = org[i];
         }
 
-        t++;
+        //t++;
+    }
+
+    return answer;
+}
+
+int main(){
+    cin >> N >> M;
+
+    vector<string> input(M);
+    for(int m = 0; m < M; m++){
+        cin >> input[m];
+    }
+
+    //const double TIME = 2.8;
+    const double TIME = 1.0;
+
+    ll score = 0;
+    vector<string> answer;
+    vector<int> thresholds{2, 3, 4};
+    for(auto& thres : thresholds){
+        auto cand = solve(input, TIME/thresholds.size(), thres);
+        auto tmp_score = calc_score(input, cand);
+        if(tmp_score > score){
+            score = tmp_score;
+            answer = cand;
+        }
     }
 
     print_answer(answer);
