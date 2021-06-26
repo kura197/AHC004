@@ -67,24 +67,6 @@ int overlap(string a, string b){
     return ans;
 }
 
-//// 文字列の長さ順にソート
-//TODO
-vector<string> sort_by_order(set<string>& strs){
-    using P = pair<ll, string>;
-    vector<P> tmp;
-    for(auto& s : strs){
-        tmp.emplace_back(s.length(), s);
-    }
-    sort(tmp.begin(), tmp.end());
-
-    vector<string> ret;
-    for(auto& p : tmp){
-        ret.emplace_back(p.second);
-    }
-
-    return ret;
-}
-
 void print_answer(vector<string>& answer){
     REP(i,SIZE){
         cout << answer[i] << endl;
@@ -102,8 +84,27 @@ void set_naive_answer(vector<string>& answer){
     }
 }
 
-//// 取り除いても問題ないものを除去
-void remove_duplicate(set<string>& X){
+//// 取り除いても問題ないものを除去 O(NM^2)
+void remove_duplicate(set<string, Compare>& X){
+    set<string, Compare> tmp;
+    for(auto& s : X){
+        int size = s.size();
+        bool remove = false;
+        for(auto& t : tmp){
+            for(int r = 0; r < size; r++){
+                string cand = s.substr(r) + s.substr(0, r);
+                if(contain(s, t)) {
+                    remove = true;
+                    break;
+                }
+            }
+        }
+
+        if(!remove)
+            tmp.insert(s);
+    }
+
+    X = tmp;
 }
 
 int main(){
@@ -111,30 +112,15 @@ int main(){
     cin >> N >> M;
     vector<string> answer(N, string(N, '.'));
 
-    set<string> input;
+    set<string, Compare> input;
     for(int m = 0; m < M; m++){
         string s;
         cin >> s;
         input.insert(s);
     }
 
-    //set<string, Compare> test;
-    //for(auto& s : input)
-    //    test.insert(s);
-    //for(auto& t : test){
-    //    cerr << t << endl;
-    //}
-
-    auto strs = sort_by_order(input);
-    reverse(strs.begin(), strs.end());
-
-    //cout << strs.size() << endl;
-
-    unordered_set<string> remain;
-    remain.insert(strs[0]);
-    for(size_t i = 1; i < strs.size(); i++){
-        auto s = strs[i];
-
+    set<string, Compare> remain;
+    for(auto& s : input){
         //// s はrowのどれかに含まれるか？
         bool valid = false;
         for(auto& r : remain){
@@ -147,13 +133,14 @@ int main(){
 
         //// s はrowのどれかの一部であるか
         for(auto& r : remain){
-            const int OVERLAP = 1;
+            const int OVERLAP = 3;
             auto check = [&remain, &N](auto& a, auto& b) {
                 int al = a.length(), bl = b.length();
                 auto len = overlap(a, b);
                 if(len >= OVERLAP){
                     if(al + bl - len > N)
                         return false;
+                    //auto test = a + b.substr(len);
                     remain.insert(a + b.substr(len));
                     ///TODO
                     remain.erase(a);
@@ -173,10 +160,11 @@ int main(){
         remain.insert(s);
     }
 
-    //cout << remain.size() << endl;
-    //for(auto& r : remain){
-    //    cerr << r << endl;
-    //}
+    remove_duplicate(remain);
+    cerr << remain.size() << endl;
+    for(auto& r : remain){
+        cerr << r << endl;
+    }
 
     ////TODO
     int row = 0;
@@ -187,6 +175,7 @@ int main(){
             ans = ans.substr(0, N);
         for(int i = ans.length(); i < N; i++)
             ans += '.';
+            //ans += random_char();
         answer[row] = ans;
         row++;
         if(row >= N)
