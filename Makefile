@@ -4,7 +4,7 @@ OUTPUT = answer
 
 TESTER = ./test.sh
 VIS = tools/target/release/vis
-TEST_IN = tools/in/0010.txt
+TEST_IN = tools/in/0050.txt
 
 TEST_OUT = result.txt
 
@@ -12,8 +12,8 @@ TEST_SHELL = ./test.sh
 TEST_PY = ./test.py
 
 CXX = g++-7
-CFLAGS = --std=c++17 -Wall -O3
-#CFLAGS = --std=c++17 -g -fsanitize=address -Wall
+#CFLAGS = --std=c++17 -Wall -O3
+CFLAGS = --std=c++17 -g -fsanitize=address -Wall
 #CFLAGS = --std=c++17 -g -fsanitize=address -Wall -p
 
 .PHONY: test
@@ -26,7 +26,7 @@ $(TEST_OUT): $(OUTPUT)
 	./$(OUTPUT) < $(TEST_IN) > $@
 
 .PHONY: svg
-svg: $(OUTPUT) $(TEST_OUT)
+svg: $(OUTPUT)
 	$(TESTER) $(TEST_IN) ./$(OUTPUT) tmp
 	eog out.svg
 

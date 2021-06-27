@@ -330,33 +330,8 @@ void print_elms_sum(auto& elms){
     cerr << "SUM : " << sum << endl;
 }
 
-vector<string> solve(vector<string> input, double time, int threshold, mt19937& engine){
-    ll start = clock();
+vector<string> make_answer_by_high_elms(auto& elms, auto& remain, auto& input, int start, double time, mt19937& engine){
     vector<string> answer(N, string(N, '.'));
-
-    //// そのstringがいくつのinputでできているか
-    unordered_map<string, int> elms;
-
-    for(auto& s : input)
-        elms[s] += 1;
-    
-    set<string, Compare> remain;
-    for(auto& s : input)
-        remain.insert(s);
-
-    for(int thres = threshold; thres >= 1; thres--){
-        remain = remove_contain(remain, elms);
-        remain = append_query(remain, elms, thres);
-    }
-    remain = gather_query(remain, elms);
-
-    //remove_duplicate(remain);
-    
-    cerr << remain.size() << endl;
-    for(auto& r : remain){
-        cerr << r << " " << elms[r] << endl;
-    }
-
     //// 含まれる要素数が大きいものから構成
     vector<pair<int, string>> tmp;
     for(auto& [str, cnt] : elms)
@@ -365,6 +340,8 @@ vector<string> solve(vector<string> input, double time, int threshold, mt19937& 
     int row = 0;
     int idx = 0;
     for(; idx < (int)tmp.size(); idx++){
+        if(row >= N)
+            break;
         auto ans = tmp[idx].second;
         cerr << ans << " : "  << elms[ans] << endl;
         for(int i = ans.length(); i < N; i++)
@@ -372,9 +349,9 @@ vector<string> solve(vector<string> input, double time, int threshold, mt19937& 
         answer[row] = ans;
         row++;
         remain.erase(tmp[idx].second);
-        if(row >= N)
-            break;
     }
+
+    //print_answer_debug(answer);
 
     //// answerの各行を回転し、tmpと列ごとに一致させていく
     //for(; idx < (int)tmp.size(); idx++){
@@ -386,12 +363,14 @@ vector<string> solve(vector<string> input, double time, int threshold, mt19937& 
     vector<int> indices(N);
     REP(i,N) indices[i] = i;
 
-    string target = tmp[idx].second;
     ll score = calc_score_col(input, answer);
     //// 時間まで、行を適当にシャッフル --> idx番目が列に含まれるように回転 を繰り返す。
+    int t = idx;
     while(1){
         if((double)(clock() - start) / CLOCKS_PER_SEC > time)
             break;
+
+        string target = tmp[t].second;
 
         shuffle(indices.begin(), indices.end(), engine);
         vector<string> cand(N);
@@ -427,8 +406,253 @@ vector<string> solve(vector<string> input, double time, int threshold, mt19937& 
             score = tmp_score;
             answer = cand;
         }     
+
+        t++;
+        if(t == (int)tmp.size())
+            t = idx;
     }
 
+    //cerr << endl;
+    //print_answer_debug(answer);
+    return answer;
+}
+
+void put_by_greedy(string& s, auto& mat, mt19937& engine){
+    int sl = s.length();
+    int row = -1, col = -1;
+    int max_score = -1;
+    int bestDir = -1;
+
+    int match = 0;
+    REP(i,N){
+        REP(j,N){
+            REP(dir,2){
+                int tmp_score = 0;
+                for(int k = 0; k < sl; k++){
+                    int y = (dir == 0) ? (i + k) % N : i;
+                    int x = (dir == 1) ? (j + k) % N : j;
+                    if(s[k] == mat[y][x])
+                        tmp_score += 2;
+                    else if(mat[y][x] == '.')
+                        tmp_score += 1;
+                }
+                if(tmp_score > max_score){
+                    max_score = tmp_score;
+                    row = i; 
+                    col = j;
+                    bestDir = dir;
+                }
+                else if(tmp_score == max_score){
+                    static uniform_int_distribution<> rand(0, 65535);
+                    match++;
+                    if(rand(engine) % match == 0){
+                        row = i; 
+                        col = j;
+                        bestDir = dir;
+                    }
+                }
+            }
+        }
+    }
+
+    if(max_score != -1){
+        for(int k = 0; k < sl; k++){
+            int y = (bestDir == 0) ? (row + k) % N : row;
+            int x = (bestDir == 1) ? (col + k) % N : col;
+            if(mat[y][x] == '.')
+                mat[y][x] = s[k];
+        }
+    }
+}
+
+void put_by_greedy_iwashi(string& s, auto& mat, mt19937& engine){
+    int sl = s.length();
+    int row = -1, col = -1;
+    int bestDir = -1;
+    int bestDiff = N;
+
+    int match = 0;
+    REP(i,N){
+        REP(j,N){
+            REP(dir,2){
+                //int tmp_score = 0;
+                bool valid = true;
+                int diff = 0;
+                for(int k = 0; k < sl; k++){
+                    int y = (dir == 0) ? (i + k) % N : i;
+                    int x = (dir == 1) ? (j + k) % N : j;
+                    if(s[k] != mat[y][x]){
+                        if(mat[y][x] == '.')
+                            diff++;
+                        else{
+                            valid = false;
+                            break;
+                        }
+                    }
+                }
+
+                if(valid){
+                    if(diff < bestDiff){
+                        bestDiff = diff;
+                        row = i; 
+                        col = j;
+                        bestDir = dir;
+                        match = 1;
+                    }
+                    else if(diff == bestDiff){
+                        static uniform_int_distribution<> rand(0, 65535);
+                        match++;
+                        if(rand(engine) % match == 0){
+                            row = i; 
+                            col = j;
+                            bestDir = dir;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if(match > 0){
+        for(int k = 0; k < sl; k++){
+            int y = (bestDir == 0) ? (row + k) % N : row;
+            int x = (bestDir == 1) ? (col + k) % N : col;
+            if(mat[y][x] == '.')
+                mat[y][x] = s[k];
+        }
+    }
+}
+
+vector<string> make_answer_by_greedy(auto& elms, auto& remain, auto& input, int start, double time, mt19937& engine){
+    //vector<pair<int, string>> tmp;
+    //for(auto& [str, cnt] : elms)
+    //    tmp.emplace_back(mp(cnt, str));
+    //sort(tmp.rbegin(), tmp.rend());
+
+    //vector<string> strs;
+    //for(auto& p : tmp)
+    //    strs.emplace_back(p.second);
+    
+    vector<string> strs;
+    for(auto& p : remain)
+        strs.emplace_back(p);
+
+    sort(strs.begin(), strs.end(), [](const string& lhs, const string& rhs){
+                return lhs.size() > rhs.size();
+            });
+
+    ll score = -1;
+    vector<string> answer(N, string(N, '.'));
+    while(1){
+        vector<string> cand(N, string(N, '.'));
+        for(auto& s : strs){
+            put_by_greedy_iwashi(s, cand, engine);
+        }
+
+        //ll tmp_score = calc_score_col(input, cand);
+        ll tmp_score = calc_score(input, cand);
+
+        if(tmp_score > score){
+            score = tmp_score;
+            answer = cand;
+        }     
+
+        shuffle(strs.begin(), strs.end(), engine);
+        sort(strs.begin(), strs.end(), [](const string& lhs, const string& rhs){
+                return lhs.size() > rhs.size();
+                });
+
+        if((double)(clock() - start) / CLOCKS_PER_SEC > time)
+            break;
+    }
+
+    return answer;
+}
+
+void append_inputs(vector<string>& input, const int threshold){
+rerun:
+    int size = input.size();
+    REP(i,size){
+        REP(j,size){
+            if(i == j) continue;
+            int il = input[i].length();
+            int jl = input[j].length();
+            int len = overlap(input[i], input[j]);
+            if(len >= threshold && il + jl - len <= N){
+                input[i] += input[j].substr(len);
+                input.erase(input.begin() + j);
+                goto rerun;
+            }
+        }
+    }
+}
+
+void merge_inputs(vector<string>& input){
+rerun:
+    int size = input.size();
+    REP(i,size){
+        REP(j,size){
+            if(i == j) continue;
+            int il = input[i].length();
+            int jl = input[j].length();
+            if(il + jl <= N){
+                input[i] += input[j];
+                input.erase(input.begin() + j);
+                goto rerun;
+            }
+        }
+    }
+}
+vector<string> solve_iwashi(vector<string> input, double time, int threshold, mt19937& engine){
+    ll start = clock();
+    vector<string> answer(N, string(N, '.'));
+
+    append_inputs(input, threshold);
+    //merge_inputs(input);
+
+    for(auto& s : input){
+        cerr << s << endl;
+    }
+
+    answer = make_answer_by_greedy(input, input, input, start, time, engine);
+
+    return answer;
+}
+
+vector<string> solve(vector<string> input, double time, int threshold, mt19937& engine){
+    ll start = clock();
+    vector<string> answer(N, string(N, '.'));
+
+    //// そのstringがいくつのinputでできているか
+    unordered_map<string, int> elms;
+
+    for(auto& s : input)
+        elms[s] += 1;
+    
+    set<string, Compare> remain;
+    for(auto& s : input)
+        remain.insert(s);
+
+    //for(int thres = threshold; thres >= 1; thres--){
+    while(1){
+        const int thres = threshold;
+        int size = remain.size();
+        remain = remove_contain(remain, elms);
+        remain = append_query(remain, elms, thres);
+        if(size == (int)remain.size())
+            break;
+    }
+    remain = gather_query(remain, elms);
+
+    //remove_duplicate(remain);
+    
+    cerr << remain.size() << endl;
+    for(auto& r : remain){
+        cerr << r << " " << elms[r] << endl;
+    }
+
+    //answer = make_answer_by_high_elms(elms, remain, input, start, time, engine);
+    answer = make_answer_by_greedy(elms, remain, input, start, time, engine);
     return answer;
 }
 
@@ -443,18 +667,19 @@ int main(){
     const double TIME = 2.9;
     //const double TIME = 0.4;
 
-    ll score = 0;
+    ll score = -1;
     vector<string> answer;
     //// duplicated
-    //vector<int> thresholds{5};
+    vector<int> thresholds{5};
     vector<int> seeds{1};
-    vector<int> thresholds{2, 3, 4, 5};
+    //vector<int> thresholds{2, 3, 4, 5};
     //vector<int> seeds{1, 100, 10000};
     const int iteration = thresholds.size() * seeds.size();
     for(auto& thres : thresholds){
         for(auto& seed : seeds){
             mt19937 engine = mt19937(seed);
-            auto cand = solve(input, TIME/iteration, thres, engine);
+            //auto cand = solve(input, TIME/iteration, thres, engine);
+            auto cand = solve_iwashi(input, TIME/iteration, thres, engine);
             auto tmp_score = calc_score(input, cand);
             if(tmp_score > score){
                 score = tmp_score;
